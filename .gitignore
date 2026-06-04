@@ -1,0 +1,4 @@
+__pycache__/
+.claude/
+*.m
+animate_trajectory.py
