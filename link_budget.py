@@ -24,19 +24,31 @@ class LinkBudget:
 
     R_EARTH = 6371e3              # m, mean Earth radius (horizon model)
 
+    @staticmethod
+    def estimate_zenith_loss_db(f_hz):
+        """
+        Estimate zenith atmospheric loss (dB) for a given frequency.
+        Based on typical clear-sky conditions with standard humidity.
+        Uses piecewise linear interpolation from empirical data points.
+        """
+        f_ghz = f_hz / 1e9
+        freq_ref = np.array([1.0, 2.2, 10.0, 35.0])
+        loss_ref = np.array([0.015, 0.04, 0.15, 1.0])
+        return float(np.interp(f_ghz, freq_ref, loss_ref))
+
     def __init__(
         self,
         P,                         # dBW, transmitter power
         G_r,                       # dBi, receiver gain
         R,                         # Hz, bit rate
-        f=2.2e9,                   # Hz, frequency (S-band default)
+        f,                         # Hz, frequency (required, no default)
         *,
         n_tx_antennas=1,           # number of transmitter antennas
         tx_antenna=None,           # AntennaPattern; None = flat gain at G_t
         G_t=0.0,                   # dBi, transmit peak/flat gain
         T_s=290.0,                 # K, system noise temperature (fixed)
         L_l=1.0,                   # dB, transmitter line/feed loss (fixed)
-        L_a_zenith=0.04,           # dB, zenith atmospheric loss (fixed)
+        L_a_zenith=None,           # dB, zenith atmospheric loss; auto-estimated if None
         L_pol=0.0,                 # dB, polarization mismatch
         el_min_deg=2.0,            # deg, elevation angle clamp
     ):
@@ -49,7 +61,7 @@ class LinkBudget:
         self.G_t = G_t
         self.T_s = T_s
         self.L_l = L_l
-        self.L_a_zenith = L_a_zenith
+        self.L_a_zenith = L_a_zenith if L_a_zenith is not None else self.estimate_zenith_loss_db(f)
         self.L_pol = L_pol
         self.el_min_deg = el_min_deg
 

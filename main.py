@@ -38,13 +38,12 @@ if __name__ == "__main__":
         P=10.0 * np.log10(20),  # 2 W transmitter
         G_r=G_r,
         R=500.0e6,              # 500 Mbps
-        f=2.2e9,                # S-band
+        f=2.2e9,                # Frequency (S-band default: 2.2 GHz)
         n_tx_antennas=1,
         tx_antenna=pattern,
         G_t=0.0,
         T_s=290.0,              # Fixed system noise temperature
         L_l=1.0,                # Fixed feeder loss
-        L_a_zenith=0.04,        # Fixed zenith attenuation
     )
     result = link.compute(traj)
 
