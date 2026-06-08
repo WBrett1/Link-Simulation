@@ -34,16 +34,20 @@ if __name__ == "__main__":
     G_r = LinkBudget.parabolic_dish_gain_db(diameter_m=1.7, efficiency=0.8, f=2.2e9)
 
     # Link budget with simplified fixed values
+    # Polarization: RHCP/LHCP with 0.5 dB constant loss
+    # (represents ~0.3 dB antenna axial ratio + ~0.2 dB Faraday margin)
+    # 3 antennas evenly spaced at 0°, 120°, 240° around rocket body
     link = LinkBudget(
         P=10.0 * np.log10(20),  # 2 W transmitter
         G_r=G_r,
-        R=500.0e6,              # 500 Mbps
+        R=60.0e6,              # 500 Mbps
         f=2.2e9,                # Frequency (S-band default: 2.2 GHz)
-        n_tx_antennas=1,
+        n_tx_antennas=3,
         tx_antenna=pattern,
         G_t=0.0,
         T_s=290.0,              # Fixed system noise temperature
         L_l=1.0,                # Fixed feeder loss
+        L_cp=0.5,               # dB, circular polarization loss
     )
     result = link.compute(traj)
 

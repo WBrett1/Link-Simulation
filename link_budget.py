@@ -19,6 +19,8 @@ class LinkBudget:
     Per-timestep link budget for a sounding-rocket downlink (S-band default).
 
     Frame: ENU with the receiver at the origin. Units: P in dBW, G_t / G_r in dBi.
+    Polarization: Circular (RHCP or LHCP) with constant loss modeling antenna
+    axial ratio degradation and nominal ionospheric Faraday rotation effects.
     Uses industry-standard fixed values for atmospheric and system parameters.
     """
 
@@ -49,7 +51,7 @@ class LinkBudget:
         T_s=290.0,                 # K, system noise temperature (fixed)
         L_l=1.0,                   # dB, transmitter line/feed loss (fixed)
         L_a_zenith=None,           # dB, zenith atmospheric loss; auto-estimated if None
-        L_pol=0.0,                 # dB, polarization mismatch
+        L_cp=0.5,                  # dB, circular polarization loss (antenna AR + Faraday margin)
         el_min_deg=2.0,            # deg, elevation angle clamp
     ):
         self.P = P
@@ -62,7 +64,7 @@ class LinkBudget:
         self.T_s = T_s
         self.L_l = L_l
         self.L_a_zenith = L_a_zenith if L_a_zenith is not None else self.estimate_zenith_loss_db(f)
-        self.L_pol = L_pol
+        self.L_cp = L_cp
         self.el_min_deg = el_min_deg
 
     @staticmethod
@@ -150,6 +152,127 @@ class LinkBudget:
         ], axis=0)
 
     @staticmethod
+    def _body_frame_from_enu(u_spin, theta):
+        """
+        Compute orthonormal body-frame axes in ENU coordinates.
+
+        Args:
+            u_spin: spin axis unit vector(s) in ENU, shape (3,) or (3, N)
+            theta: roll angle(s) about spin axis, scalar or shape (N,)
+
+        Returns:
+            (z_body, x_body, y_body): unit vectors in ENU frame
+                z_body: points along boresight (spin axis)
+                x_body: perpendicular, oriented by zero-roll reference
+                y_body: completes right-handed frame (z_body × x_body)
+        """
+        # Ensure u_spin is 2D: (3, N)
+        u_spin = np.asarray(u_spin, dtype=float)
+        if u_spin.ndim == 1:
+            u_spin = u_spin[:, None]
+        n = u_spin.shape[1]
+
+        # Normalize spin axis
+        z_body = u_spin / (np.linalg.norm(u_spin, axis=0, keepdims=True) + 1e-10)
+
+        # Choose reference direction perpendicular to z_body
+        # If nearly vertical (z ≈ ±1), use East [1, 0, 0]; else use Up [0, 0, 1]
+        ref = np.zeros((3, n))
+        near_vertical = np.abs(z_body[2, :]) > 0.999
+        ref[2, ~near_vertical] = 1.0
+        ref[0, near_vertical] = 1.0
+
+        # Gram-Schmidt: x_body_0 = ref - (ref · z_body) z_body
+        ref_dot_z = np.sum(ref * z_body, axis=0, keepdims=True)
+        x_body_0 = ref - ref_dot_z * z_body
+        x_body_0 = x_body_0 / (np.linalg.norm(x_body_0, axis=0, keepdims=True) + 1e-10)
+
+        # y_body_0 perpendicular to both (right-hand rule: z × x)
+        y_body_0 = np.cross(z_body, x_body_0, axis=0)
+
+        # Apply roll rotation about z_body
+        # x_body = cos(θ) x_body_0 + sin(θ) y_body_0
+        # y_body = -sin(θ) x_body_0 + cos(θ) y_body_0
+        theta = np.asarray(theta, dtype=float)
+        if np.isscalar(theta):
+            theta = np.full(n, theta)
+        cos_theta = np.cos(theta)
+        sin_theta = np.sin(theta)
+
+        x_body = cos_theta[None, :] * x_body_0 + sin_theta[None, :] * y_body_0
+        y_body = -sin_theta[None, :] * x_body_0 + cos_theta[None, :] * y_body_0
+
+        return z_body, x_body, y_body
+
+    @staticmethod
+    def _los_to_body_angles(u_r2r, z_body, x_body, y_body):
+        """
+        Transform receiver line-of-sight to body-frame spherical coordinates.
+
+        Args:
+            u_r2r: rocket-to-receiver unit vector in ENU, shape (3,) or (3, N)
+            z_body, x_body, y_body: body frame axes in ENU
+
+        Returns:
+            theta_off: off-boresight angle (0 to π)
+            phi_body: azimuthal angle in body frame (0 to 2π)
+                phi_body = 0 → x_body direction (azimuth plane)
+                phi_body = π/2 → y_body direction (elevation plane)
+        """
+        # Project LOS onto body axes
+        los_x = np.sum(u_r2r * x_body, axis=0)
+        los_y = np.sum(u_r2r * y_body, axis=0)
+        los_z = np.sum(u_r2r * z_body, axis=0)
+
+        # Polar angle from boresight
+        theta_off = np.arccos(np.clip(los_z, -1.0, 1.0))
+
+        # Azimuthal angle in body frame
+        phi_body = np.arctan2(los_y, los_x)
+        phi_body = np.mod(phi_body, 2.0 * np.pi)
+
+        return theta_off, phi_body
+
+    def _multi_antenna_best_gain(self, u_r2r, z_body, x_body, y_body):
+        """
+        Compute the best gain from multiple antennas evenly spaced around the rocket.
+
+        Args:
+            u_r2r: rocket-to-receiver unit vector in ENU, shape (3, N)
+            z_body, x_body, y_body: body frame axes in ENU, each shape (3, N)
+
+        Returns:
+            best_gain: maximum gain across all antennas, shape (N,)
+        """
+        # Project LOS onto body axes
+        los_x = np.sum(u_r2r * x_body, axis=0)
+        los_y = np.sum(u_r2r * y_body, axis=0)
+        los_z = np.sum(u_r2r * z_body, axis=0)
+
+        # Off-boresight angle (same for all antennas)
+        theta_off = np.arccos(np.clip(los_z, -1.0, 1.0))
+
+        # Compute gain from each antenna at evenly-spaced positions
+        gains = []
+        for i in range(self.n_tx_antennas):
+            phi_ant = i * 2.0 * np.pi / self.n_tx_antennas
+
+            # Azimuthal angle in the antenna-centered frame
+            # Receiver direction is at atan2(los_y, los_x) in the body frame
+            # Antenna i is at phi_ant, so rotate the coordinate system
+            phi_body_ant = np.arctan2(los_y, los_x) - phi_ant
+            phi_body_ant = np.mod(phi_body_ant, 2.0 * np.pi)
+
+            # Get gain from this antenna
+            gain = self.tx_antenna.gain_3d_db(theta_off, phi_body_ant)
+            gains.append(gain)
+
+        gains = np.array(gains)
+        best_gain = np.max(gains, axis=0)
+
+        return best_gain
+
+    @staticmethod
     def parabolic_dish_gain_db(diameter_m, efficiency, f):
         """Peak gain (dBi) of a parabolic dish from diameter, efficiency, freq."""
         wavelength = 299792458.0 / f
@@ -179,15 +302,20 @@ class LinkBudget:
         el = np.arctan2(z, r_g)                       # rad, elevation at receiver
         u_r2r = -np.stack([x, y, z], axis=0) / d      # unit vector rocket -> receiver
 
-        # Off-axis angle between rocket spin axis and the LOS to the receiver
+        # Compute body-frame axes from attitude angles
         u_spin = self._spin_axis_enu(theta, phi, psi)
-        cos_off = np.clip(np.sum(u_spin * u_r2r, axis=0), -1.0, 1.0)
-        theta_off = np.arccos(cos_off)                # rad
+        z_body, x_body, y_body = self._body_frame_from_enu(u_spin, theta)
 
         # Effective gains
         G_t_eff = self.G_t
         if self.tx_antenna is not None:
-            G_t_eff = self.G_t + self.tx_antenna.composite_gain_db(theta_off)
+            if self.n_tx_antennas == 1:
+                # Single antenna case
+                theta_off, phi_body = self._los_to_body_angles(u_r2r, z_body, x_body, y_body)
+                G_t_eff = self.G_t + self.tx_antenna.gain_3d_db(theta_off, phi_body)
+            else:
+                # Multiple antennas: compute gain from each and select the best
+                G_t_eff = self.G_t + self._multi_antenna_best_gain(u_r2r, z_body, x_body, y_body)
         G_r_eff = self.G_r
 
         # Free-space path loss (d in m, f in Hz); 147.55 = 20*log10(c / 4pi)
@@ -199,13 +327,8 @@ class LinkBudget:
         # Link-budget assembly (all in dB)
         k_dB = 10.0 * np.log10(K_BOLTZMANN)          # ~ -228.6 dBW/K/Hz
         EIRP = self.P - self.L_l + G_t_eff            # dBW
-
-        # Multiple transmit antennas: incoherent power addition
-        if self.n_tx_antennas > 1:
-            EIRP = EIRP + 10.0 * np.log10(self.n_tx_antennas)
-
         GT = G_r_eff - 10.0 * np.log10(self.T_s)     # dB/K
-        CN0 = EIRP + GT - L_s - L_a - self.L_pol - k_dB  # dB-Hz
+        CN0 = EIRP + GT - L_s - L_a - self.L_cp - k_dB  # dB-Hz
         EbN0 = CN0 - 10.0 * np.log10(self.R)         # dB
 
         # Broadcast scalars to length-N for a consistent return shape

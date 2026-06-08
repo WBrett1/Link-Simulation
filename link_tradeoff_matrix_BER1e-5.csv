@@ -1,0 +1,26 @@
+Modulation,FEC,ReqEbN0_dB,Eta_info_bps_per_Hz,NetRate_Mbps,GrossChanRate_Mbps,Method
+SOQPSK-TG,"Uncoded",10.49,1.282,115.4,115.4,BPSK-proxy+offset
+SOQPSK-TG,"Conv K=7 r1/2",4.9,0.639,57.5,115.4,BPSK-proxy+offset
+SOQPSK-TG,"RS(255,223)",7.03,1.121,100.9,115.4,BPSK-proxy+offset
+SOQPSK-TG,"Turbo r1/3",2.4,0.426,38.3,115.4,BPSK-proxy+offset
+SOQPSK-TG,"LDPC r1/2",1.78,0.641,57.7,115.4,BPSK-proxy+offset
+QPSK,"Uncoded",9.59,1.481,133.3,133.3,closed form
+QPSK,"Conv K=7 r1/2",4,0.739,66.5,133.3,sim
+QPSK,"RS(255,223)",6.13,1.296,116.6,133.3,sim
+QPSK,"Turbo r1/3",1.25,0.492,44.3,133.3,sim
+QPSK,"LDPC r1/2",0.88,0.741,66.7,133.3,sim (low conf)
+16QAM,"Uncoded",13.43,2.963,266.7,266.7,closed form
+16QAM,"Conv K=7 r1/2",6.5,1.477,132.9,266.7,sim
+16QAM,"RS(255,223)",9.75,2.591,233.2,266.7,sim
+16QAM,"Turbo r1/3",3,0.984,88.5,266.7,sim
+16QAM,"LDPC r1/2",3.19,1.481,133.3,266.7,sim (low conf)
+64QAM,"Uncoded",17.79,4.444,400,400,closed form
+64QAM,"Conv K=7 r1/2",9,2.216,199.4,400,sim
+64QAM,"RS(255,223)",14,3.887,349.8,400,sim
+64QAM,"Turbo r1/3",5.5,1.476,132.8,400,sim
+64QAM,"LDPC r1/2",5.88,2.222,200,400,sim
+256QAM,"Uncoded",22.5,5.926,533.3,533.3,closed form
+256QAM,"Conv K=7 r1/2",12.5,2.954,265.9,533.3,sim
+256QAM,"RS(255,223)",18.5,5.182,466.4,533.3,sim
+256QAM,"Turbo r1/3",7,1.968,177.1,533.3,sim
+256QAM,"LDPC r1/2",8.81,2.963,266.7,533.3,sim (low conf)

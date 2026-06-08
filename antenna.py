@@ -63,3 +63,40 @@ class AntennaPattern:
         g_az_lin = 10.0 ** (self.azimuth_gain_db(theta_off_rad) / 10.0)
         g_el_lin = 10.0 ** (self.elevation_gain_db(theta_off_rad) / 10.0)
         return 10.0 * np.log10(0.5 * (g_az_lin + g_el_lin))
+
+    def gain_3d_db(self, theta_off_rad, phi_body_rad):
+        """
+        3D antenna gain (dBi) vs off-boresight angle and azimuthal angle in body frame.
+
+        Interpolates between azimuth (H-plane) and elevation (E-plane) cuts based on
+        phi_body. The azimuth cut is at phi_body = 0, π (side-to-side); the elevation
+        cut is at phi_body = ±π/2 (up-down).
+
+        Args:
+            theta_off_rad: angle from boresight (0 to π), scalar or ndarray
+            phi_body_rad: azimuthal angle in body frame (0 to 2π), same shape as theta_off
+
+        Returns:
+            Gain in dBi, same shape as inputs
+        """
+        # Normalize phi_body to [0, 2π]
+        phi_body_rad = np.mod(phi_body_rad, 2.0 * np.pi)
+
+        # Get gains from both plane cuts at this off-boresight angle
+        g_az = self.azimuth_gain_db(theta_off_rad)
+        g_el = self.elevation_gain_db(theta_off_rad)
+
+        # Compute blending weights based on azimuthal angle
+        # phi_body = 0, π → all azimuth (side-to-side)
+        # phi_body = π/2, 3π/2 → all elevation (up-down)
+        # Use cos²/sin² for smooth interpolation
+        phi_normalized = np.mod(phi_body_rad, np.pi)
+        weight_az = np.cos(phi_normalized) ** 2
+        weight_el = np.sin(phi_normalized) ** 2
+
+        # Convert to linear, weight, and convert back to dB
+        g_az_lin = 10.0 ** (g_az / 10.0)
+        g_el_lin = 10.0 ** (g_el / 10.0)
+        g_combined_lin = weight_az * g_az_lin + weight_el * g_el_lin
+
+        return 10.0 * np.log10(g_combined_lin)
