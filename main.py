@@ -6,7 +6,7 @@ from plotting import plot_antenna_pattern, plot_trajectory
 
 
 if __name__ == "__main__":
-    pattern = AntennaPattern.from_datasheet()
+    pattern = AntennaPattern.from_csv()
 
     # Try to load trajectory from CSV file
     try:

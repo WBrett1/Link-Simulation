@@ -13,9 +13,9 @@ from rocket_viz import _draw_rocket_3d
 
 
 def plot_antenna_pattern(pattern: AntennaPattern, show=True):
-    """Render the antenna pattern's two datasheet cuts and the roll-averaged composite."""
+    """Render the antenna pattern's azimuth and elevation cuts."""
     fig, axes = plt.subplots(
-        1, 3, subplot_kw={"projection": "polar"}, figsize=(15, 5)
+        1, 2, subplot_kw={"projection": "polar"}, figsize=(10, 5)
     )
     phi = np.linspace(0.0, 2.0 * np.pi, 721)
 
@@ -28,8 +28,6 @@ def plot_antenna_pattern(pattern: AntennaPattern, show=True):
     axes[0].set_title("Azimuth Pattern")
     axes[1].plot(phi, pattern.elevation_gain_db(phi), color="crimson", lw=2)
     axes[1].set_title("Elevation Pattern")
-    axes[2].plot(phi, pattern.composite_gain_db(phi), color="navy", lw=2)
-    axes[2].set_title("Roll-averaged composite\n(used by LinkBudget)")
 
     for ax in axes:
         ax.set_rlim(-25, 15)
